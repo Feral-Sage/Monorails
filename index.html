@@ -3,21 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Grid with Data Input</title>
+    <title>Full Page Square Grid with Priority</title>
     <style>
-        /* ... (same CSS as before) ... */
+        html, body {
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+        }
+
         .grid-container {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 10px;
-            padding: 10px;
+            height: 100%;
+            width: 100%;
+            gap: 0;
+            transform-origin: top left;
         }
+
         .grid-item {
             border: 1px solid #ccc;
-            padding: 10px;
             text-align: center;
             cursor: pointer;
+            padding: 0;
         }
+
         .modal {
             display: none;
             position: fixed;
@@ -29,6 +37,7 @@
             overflow: auto;
             background-color: rgba(0, 0, 0, 0.4);
         }
+
         .modal-content {
             background-color: #fefefe;
             margin: 15% auto;
@@ -36,146 +45,276 @@
             border: 1px solid #888;
             width: 80%;
         }
+
         .close {
             color: #aaa;
             float: right;
             font-size: 28px;
             font-weight: bold;
         }
+
         .close:hover,
         .close:focus {
             color: black;
             text-decoration: none;
             cursor: pointer;
         }
+
+        .comment {
+            border: 1px solid #ddd;
+            padding: 5px;
+            margin-top: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .comment button {
+            background-color: #f00;
+            color: white;
+            border: none;
+            padding: 3px 6px;
+            cursor: pointer;
+        }
+
+        #saveButtonContainer {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 100%;
+            text-align: right;
+            padding: 10px;
+            background-color: rgba(255, 255, 255, 0.8);
+            z-index: 10;
+        }
     </style>
 </head>
 <body>
-    <div class="grid-container">
-        <div class="grid-item" data-index="0">Item 1</div>
-        <div class="grid-item" data-index="1">Item 2</div>
-        <div class="grid-item" data-index="2">Item 3</div>
-        <div class="grid-item" data-index="3">Item 4</div>
-        <div class="grid-item" data-index="4">Item 5</div>
-        <div class="grid-item" data-index="5">Item 6</div>
-        <div class="grid-item" data-index="6">Item 7</div>
-        <div class="grid-item" data-index="7">Item 8</div>
-        <div class="grid-item" data-index="8">Item 9</div>
-    </div>
+    <div class="grid-container"></div>
 
     <div id="dataModal" class="modal">
         <div class="modal-content">
             <span class="close">&times;</span>
+            <h2 id="modalTitle"></h2>
             <div id="modalContent">
-                <input type="text" id="dataInput" placeholder="Enter data">
-                <button id="saveButton">Save</button>
-                <button id="editButton" style="display: none;">Edit</button>
-                <button id="deleteButton" style="display: none;">Delete</button>
+                <input type="text" id="dataInput" placeholder="Enter comment">
+                <select id="prioritySelect">
+                    <option value="1">Priority 1 (Red)</option>
+                    <option value="2">Priority 2 (Yellow)</option>
+                    <option value="3">Priority 3 (Green)</option>
+                </select>
+                <button id="saveButton">Save Comment</button>
+                <div id="commentDisplay"></div>
             </div>
         </div>
     </div>
 
+    <div id="saveButtonContainer">
+        <button id="savePageButton">Save Page</button>
+    </div>
+
     <script>
-        const gridItems = document.querySelectorAll('.grid-item');
+        const gridContainer = document.querySelector('.grid-container');
         const modal = document.getElementById('dataModal');
         const modalContent = document.getElementById('modalContent');
         const dataInput = document.getElementById('dataInput');
         const saveButton = document.getElementById('saveButton');
-        const editButton = document.getElementById('editButton');
-        const deleteButton = document.getElementById('deleteButton');
         const closeButton = document.querySelector('.close');
+        const modalTitle = document.getElementById('modalTitle');
+        const commentDisplay = document.getElementById('commentDisplay');
+        const prioritySelect = document.getElementById('prioritySelect');
+        const savePageButton = document.getElementById('savePageButton');
 
         let currentItemIndex = null;
+        let data = {};
 
-        async function saveData() {
-            const fileName = `data_${currentItemIndex}.json`;
-            const data = { value: dataInput.value };
-            try {
-                const response = await fetch(fileName, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(data),
+        function createGrid() {
+            const numCols = 40;
+            const numRows = 30;
+            const cellSize = Math.min(window.innerWidth / numCols, window.innerHeight / numRows);
+
+            gridContainer.style.gridTemplateColumns = `repeat(${numCols}, ${cellSize}px)`;
+            gridContainer.style.gridTemplateRows = `repeat(${numRows}, ${cellSize}px)`;
+
+            gridContainer.innerHTML = '';
+
+            for (let i = 0; i < numRows; i++) {
+                for (let j = 0; j < numCols; j++) {
+                    const index = i * numCols + j;
+                    const gridItem = document.createElement('div');
+                    gridItem.classList.add('grid-item');
+                    gridItem.dataset.index = index;
+                    gridContainer.appendChild(gridItem);
+                }
+            }
+
+            const gridItems = document.querySelectorAll('.grid-item');
+
+            gridItems.forEach(item => {
+                item.addEventListener('click', () => {
+                    currentItemIndex = item.dataset.index;
+                    loadComments();
+                    modalTitle.textContent = `Grid Item ${currentItemIndex}`;
+                    modal.style.display = 'block';
+                    updateGridColors();
                 });
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                console.log(`Data saved to ${fileName}.`);
-            } catch (error) {
-                console.error('Error saving data:', error);
-            }
-        }
-
-        async function loadData() {
-            const fileName = `data_${currentItemIndex}.json`;
-            try {
-                const response = await fetch(fileName);
-                if (response.ok) {
-                    const data = await response.json();
-                    dataInput.value = data.value;
-                    editButton.style.display = 'inline-block';
-                    deleteButton.style.display = 'inline-block';
-                } else if (response.status === 404) {
-                    dataInput.value = '';
-                    editButton.style.display = 'none';
-                    deleteButton.style.display = 'none';
-                } else {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-            } catch (error) {
-                console.error('Error loading data:', error);
-            }
-        }
-
-        async function editData() {
-            await saveData();
-            modal.style.display = 'none';
-        }
-
-        async function deleteData() {
-            const fileName = `data_${currentItemIndex}.json`;
-            try {
-                // In a real server setup, you'd use a DELETE request. This is simulated here.
-                await fetch(fileName, { method: 'DELETE' }); // This line won't actually delete the file in a browser context.
-                dataInput.value = '';
-                editButton.style.display = 'none';
-                deleteButton.style.display = 'none';
-                modal.style.display = 'none';
-                console.log(`Data deleted for ${fileName}.`);
-            } catch (error) {
-                console.error('Error deleting data:', error);
-            }
-        }
-
-        gridItems.forEach(item => {
-            item.addEventListener('click', async () => {
-                currentItemIndex = item.dataset.index;
-                await loadData();
-                modal.style.display = 'block';
             });
-        });
+            updateGridColors();
+        }
+
+        createGrid();
+        window.addEventListener('resize', createGrid);
+
+        function saveData() {
+            const priority = prioritySelect.value;
+            if (!data[currentItemIndex]) {
+                data[currentItemIndex] = [];
+            }
+            data[currentItemIndex].push({ text: dataInput.value, priority: priority });
+            dataInput.value = '';
+            loadComments();
+            updateGridColors();
+            console.log("Data saved:", data);
+        }
+
+        function loadComments() {
+			commentDisplay.innerHTML = '';
+			if (data[currentItemIndex] && data[currentItemIndex].length > 0) {
+				data[currentItemIndex].forEach((comment, index) => {
+					const commentElement = document.createElement('div');
+					commentElement.classList.add('comment');
+					let priorityLabel = '';
+					if (comment.priority === '1') {
+						priorityLabel = 'Red';
+					} else if (comment.priority === '2') {
+						priorityLabel = 'Yellow';
+					} else if (comment.priority === '3') {
+						priorityLabel = 'Green';
+					}
+					commentElement.innerHTML = `<span>${comment.text} (Priority: ${priorityLabel})</span><button data-index="${index}">Delete</button>`;
+					commentDisplay.appendChild(commentElement);
+				});
+
+				commentDisplay.querySelectorAll('button').forEach(button => {
+					button.addEventListener('click', () => {
+						const commentIndex = parseInt(button.dataset.index);
+						data[currentItemIndex].splice(commentIndex, 1);
+						loadComments();
+						updateGridColors();
+					});
+				});
+			}
+		}
+
+        function updateGridColors() {
+            const gridItems = document.querySelectorAll('.grid-item');
+            gridItems.forEach(item => {
+                const index = item.dataset.index;
+                item.style.backgroundColor = '';
+                if (data[index] && data[index].length > 0) {
+                    const highestPriority = data[index].reduce((max, comment) => Math.min(max, comment.priority), 3);
+                    if (highestPriority === 1) {
+                        item.style.backgroundColor = 'red';
+                    } else if (highestPriority === 2) {
+                        item.style.backgroundColor = 'yellow';
+                    } else if (highestPriority === 3) {
+                        item.style.backgroundColor = 'green';
+                    }
+                }
+            });
+        }
 
         closeButton.addEventListener('click', () => {
             modal.style.display = 'none';
         });
 
-        saveButton.addEventListener('click', async () => {
-            await saveData();
-            modal.style.display = 'none';
-        });
-
-        editButton.addEventListener('click', async () => {
-            await editData();
-        });
-
-        deleteButton.addEventListener('click', async () => {
-            await deleteData();
+        saveButton.addEventListener('click', () => {
+            saveData();
         });
 
         window.addEventListener('click', (event) => {
             if (event.target === modal) {
                 modal.style.display = 'none';
+            }
+        });
+
+        let isDragging = false;
+        let startX = 0;
+        let startY = 0;
+        let translateX = 0;
+        let translateY = 0;
+
+        gridContainer.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            startX = e.clientX - translateX;
+            startY = e.clientY - translateY;
+            gridContainer.style.cursor = 'grabbing';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            translateX = e.clientX - startX;
+            translateY = e.clientY - startY;
+            gridContainer.style.transform = `translate(${translateX}px, ${translateY}px)`;
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+            gridContainer.style.cursor = 'grab';
+        });
+
+        document.addEventListener('mouseleave', () => {
+            if (isDragging) {
+                isDragging = false;
+                gridContainer.style.cursor = 'grab';
+            }
+        });
+
+		async function savePage() {
+			try {
+				const now = new Date();
+				const year = now.getFullYear();
+				const month = String(now.getMonth() + 1).padStart(2, '0');
+				const day = String(now.getDate()).padStart(2, '0');
+				let hours = now.getHours();
+				const minutes = String(now.getMinutes()).padStart(2, '0');
+				const seconds = String(now.getSeconds()).padStart(2, '0');
+				const ampm = hours >= 12 ? 'PM' : 'AM';
+
+				hours = hours % 12;
+				hours = hours ? hours : 12; // the hour '0' should be '12'
+
+				const fileName = `${year}-${month}-${day}_${hours}-${minutes}-${seconds}${ampm}-Monorail.html`;
+
+				const handle = await window.showSaveFilePicker({
+					suggestedName: fileName,
+					types: [{
+						description: 'HTML Files',
+						accept: { 'text/html': ['.html', '.htm'] },
+					}],
+				});
+
+				const writable = await handle.createWritable();
+				const dataString = JSON.stringify(data);
+				const updatedHTML = document.documentElement.outerHTML.replace(
+					'let data = {};',
+					`let data = ${dataString};`
+				);
+				await writable.write(updatedHTML);
+				await writable.close();
+			} catch (error) {
+				if (error.name !== 'AbortError') {
+					console.error('Error saving file:', error);
+				}
+			}
+		}
+
+        savePageButton.addEventListener('click', savePage);
+
+        window.addEventListener('beforeunload', (event) => {
+            if (Object.keys(data).length > 0) {
+                event.preventDefault();
+                event.returnValue = '';
+                return 'You have unsaved changes. Are you sure you want to leave?';
             }
         });
     </script>
